@@ -1,0 +1,22 @@
+schema_version: 1
+
+experiment:
+  type: channel_selection
+  name: channel_selection_64_32ch
+  sessions:
+    - indy_20170124_01
+    - indy_20170127_03
+    - indy_20170131_02
+    - indy_20160630_01
+    - indy_20160622_01
+  channel_counts:
+    - 64
+    - 32
+
+training:
+  warmup_epochs: 10
+  epochs: 100
+  cpu_threads: 4
+  resume: true
+  optimized_forward: true
+  log_interval_seconds: 10

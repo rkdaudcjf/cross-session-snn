@@ -1,0 +1,26 @@
+schema_version: 1
+
+experiment:
+  type: baseline
+  name: baseline_96ch
+  sessions:
+    - indy_20170124_01
+    - indy_20170127_03
+    - indy_20170131_02
+    - indy_20160630_01
+    - indy_20160622_01
+
+training:
+  warmup_epochs: 10
+  epochs: 100
+  cpu_threads: 4
+  resume: true
+  optimized_forward: true
+  neural_lead_ms: 0
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  lr_plateau_patience: 3
+  early_stopping_patience: 10
+  beta_max: 0.999
+  shuffle_training_windows: true
+  keep_validation_remainder: true

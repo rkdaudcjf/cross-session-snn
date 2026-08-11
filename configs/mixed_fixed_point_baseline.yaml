@@ -1,0 +1,30 @@
+schema_version: 1
+
+experiment:
+  type: mixed_fixed_point_baseline_evaluation
+  name: baseline_96ch_mixed_fixed_point
+  source_name: baseline_96ch
+  sessions:
+    - indy_20170124_01
+    - indy_20170127_03
+    - indy_20170131_02
+    - indy_20160630_01
+    - indy_20160622_01
+
+# Precision widths reported by Martis et al. (2024). These values are validated
+# by scripts/run_experiment.py and cannot silently drift to a different study.
+quantization:
+  input_bits: 1
+  weight_bits: 8
+  potential_bits: 32
+  decay_bits: 13
+  decay_fractional_bits: 13
+  weight_scale_mode: pow2
+  rounding: nearest_half_away_from_zero
+  saturation: true
+
+evaluation:
+  cpu_threads: 4
+  # Re-run the same held-out span in FP32 so the comparison uses the current
+  # checkpoint, preprocessing code, and state-reset conditions.
+  evaluate_fp32: true

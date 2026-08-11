@@ -1,0 +1,49 @@
+# Virtual environments
+.venv/
+.venv.*/
+venv/
+env/
+
+# Python and notebook caches
+__pycache__/
+*.py[cod]
+.ruff_cache/
+
+# Raw neural data
+data/*
+!data/README.md
+*.mat
+*.nwb
+*.h5
+*.hdf5
+
+# Model artifacts and large arrays
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npz
+*.npy
+
+# Generated experiment outputs
+outputs/
+tmp/
+*.zip
+
+# Papers and private documents
+doc/
+papers/
+*.pdf
+
+# Local secrets and settings
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+
+# OS and IDE files
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
