@@ -1,0 +1,43 @@
+schema_version: 1
+
+experiment:
+  type: transfer_channel_selection
+  name: transfer_sutl_norm20_seed44
+  pairs:
+    - source: indy_20160622_01
+      target: indy_20160630_01
+      role: primary_8_day
+    - source: indy_20170124_01
+      target: indy_20170127_03
+      role: primary_3_day
+    - source: indy_20170127_03
+      target: indy_20170131_02
+      role: primary_4_day
+  channel_counts: [64]
+
+selection:
+  calibration_tasks: 20
+  calibration_train_tasks: 16
+  aggregation_bin_ms: 50
+  importance_quantile_bins: 8
+  source_importance_weight: 0.5
+  stationarity_weight: 0.5
+  redundancy_weight: 0.25
+  histogram_pseudocount: 1.0e-9
+
+training:
+  seed: 44
+  velocity_normalization: zscore
+  pretrain_epochs: 100
+  finetune_epochs: 100
+  scratch_epochs: 100
+  pretrain_learning_rate: 1.0e-3
+  finetune_learning_rate: 1.0e-3
+  scratch_learning_rate: 1.0e-3
+  pretrain_early_stopping_patience: 10
+  finetune_early_stopping_patience: 10
+  scratch_early_stopping_patience: 10
+  cpu_threads: 4
+  resume: true
+  optimized_forward: true
+  run_target_scratch_control: true

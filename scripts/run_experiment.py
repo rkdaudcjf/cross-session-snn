@@ -18,6 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 BASELINE_TRAINER = SCRIPT_DIR / "train_baseline.py"
 SELECTION_TRAINER = SCRIPT_DIR / "train_channel_selection.py"
+TRANSFER_SELECTION_TRAINER = SCRIPT_DIR / "train_transfer_channel_selection.py"
 FIXED_POINT_EVALUATOR = SCRIPT_DIR / "evaluate_mixed_fixed_point_baseline.py"
 FIXED_POINT_SUMMARIZER = SCRIPT_DIR / "summarize_mixed_fixed_point.py"
 BASELINE_EXPERIMENT_NAME = "baseline_96ch"
@@ -51,12 +52,8 @@ def require_mapping(payload: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def validate_name(value: Any, location: str) -> str:
-    if not isinstance(value, str) or not re.fullmatch(
-        r"[A-Za-z0-9][A-Za-z0-9_-]*", value
-    ):
-        raise ValueError(
-            f"{location} must contain only letters, numbers, underscores, and hyphens"
-        )
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value):
+        raise ValueError(f"{location} must contain only letters, numbers, underscores, and hyphens")
     return value
 
 
@@ -142,9 +139,7 @@ def validate_mixed_fixed_point_config(
     if quantization.get("weight_scale_mode") not in {"pow2", "maxabs"}:
         raise ValueError("quantization.weight_scale_mode must be 'pow2' or 'maxabs'")
     if quantization.get("rounding") != "nearest_half_away_from_zero":
-        raise ValueError(
-            "quantization.rounding must be 'nearest_half_away_from_zero'"
-        )
+        raise ValueError("quantization.rounding must be 'nearest_half_away_from_zero'")
     if quantization.get("saturation") is not True:
         raise ValueError("quantization.saturation must be true")
     if not isinstance(evaluation.get("cpu_threads"), int) or evaluation["cpu_threads"] < 1:
@@ -152,6 +147,141 @@ def validate_mixed_fixed_point_config(
     if not isinstance(evaluation.get("evaluate_fp32"), bool):
         raise TypeError("evaluation.evaluate_fp32 must be true or false")
     return experiment, quantization, evaluation
+
+
+def validate_transfer_config(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    reject_unknown(
+        payload,
+        {"schema_version", "experiment", "selection", "training"},
+        "top-level",
+    )
+    if payload.get("schema_version") != 1:
+        raise ValueError("Only schema_version: 1 is supported")
+    experiment = require_mapping(payload, "experiment")
+    selection = require_mapping(payload, "selection")
+    training = require_mapping(payload, "training")
+    training.setdefault("velocity_normalization", "none")
+    reject_unknown(
+        experiment,
+        {"type", "name", "pairs", "channel_counts"},
+        "experiment",
+    )
+    reject_unknown(
+        selection,
+        {
+            "calibration_tasks",
+            "calibration_train_tasks",
+            "aggregation_bin_ms",
+            "importance_quantile_bins",
+            "source_importance_weight",
+            "stationarity_weight",
+            "redundancy_weight",
+            "histogram_pseudocount",
+        },
+        "selection",
+    )
+    reject_unknown(
+        training,
+        {
+            "seed",
+            "pretrain_epochs",
+            "finetune_epochs",
+            "scratch_epochs",
+            "pretrain_learning_rate",
+            "finetune_learning_rate",
+            "scratch_learning_rate",
+            "pretrain_early_stopping_patience",
+            "finetune_early_stopping_patience",
+            "scratch_early_stopping_patience",
+            "cpu_threads",
+            "resume",
+            "optimized_forward",
+            "run_target_scratch_control",
+            "velocity_normalization",
+        },
+        "training",
+    )
+    validate_name(experiment.get("name"), "experiment.name")
+    pairs = experiment.get("pairs")
+    if not isinstance(pairs, list) or not pairs:
+        raise ValueError("experiment.pairs must be a non-empty list")
+    normalized_pairs = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for index, pair in enumerate(pairs):
+        if not isinstance(pair, dict):
+            raise TypeError(f"experiment.pairs[{index}] must be a mapping")
+        reject_unknown(pair, {"source", "target", "role"}, f"experiment.pairs[{index}]")
+        source = pair.get("source")
+        target = pair.get("target")
+        role = pair.get("role")
+        if source not in KNOWN_SESSIONS or target not in KNOWN_SESSIONS:
+            raise ValueError(f"Unknown transfer pair session: {source} -> {target}")
+        if source == target:
+            raise ValueError("Transfer source and target must differ")
+        validate_name(role, f"experiment.pairs[{index}].role")
+        key = (str(source), str(target))
+        if key in seen_pairs:
+            raise ValueError(f"Duplicate transfer pair: {source} -> {target}")
+        seen_pairs.add(key)
+        normalized_pairs.append(pair)
+    experiment["pairs"] = normalized_pairs
+
+    channel_counts = experiment.get("channel_counts")
+    if not isinstance(channel_counts, list) or not channel_counts:
+        raise ValueError("experiment.channel_counts must be a non-empty list")
+    if not all(isinstance(value, int) for value in channel_counts):
+        raise TypeError("experiment.channel_counts must contain integers")
+    if not set(channel_counts) <= {32, 48, 64, 80}:
+        raise ValueError("Transfer channel counts must be selected from 32, 48, 64, 80")
+
+    positive_integer_keys = {
+        "calibration_tasks",
+        "calibration_train_tasks",
+        "aggregation_bin_ms",
+        "importance_quantile_bins",
+    }
+    for key in positive_integer_keys:
+        if not isinstance(selection.get(key), int) or selection[key] < 1:
+            raise ValueError(f"selection.{key} must be a positive integer")
+    if selection["calibration_train_tasks"] >= selection["calibration_tasks"]:
+        raise ValueError("selection.calibration_train_tasks must be smaller than calibration_tasks")
+    for key in ("source_importance_weight", "stationarity_weight"):
+        value = selection.get(key)
+        if not isinstance(value, (int, float)) or not 0.0 <= float(value) <= 1.0:
+            raise ValueError(f"selection.{key} must be in [0, 1]")
+    for key in ("redundancy_weight", "histogram_pseudocount"):
+        value = selection.get(key)
+        if not isinstance(value, (int, float)) or float(value) <= 0.0:
+            raise ValueError(f"selection.{key} must be positive")
+
+    for key in (
+        "seed",
+        "pretrain_epochs",
+        "finetune_epochs",
+        "scratch_epochs",
+        "pretrain_early_stopping_patience",
+        "finetune_early_stopping_patience",
+        "scratch_early_stopping_patience",
+        "cpu_threads",
+    ):
+        if not isinstance(training.get(key), int) or training[key] < 1:
+            raise ValueError(f"training.{key} must be a positive integer")
+    for key in (
+        "pretrain_learning_rate",
+        "finetune_learning_rate",
+        "scratch_learning_rate",
+    ):
+        value = training.get(key)
+        if not isinstance(value, (int, float)) or float(value) <= 0.0:
+            raise ValueError(f"training.{key} must be positive")
+    for key in ("resume", "optimized_forward", "run_target_scratch_control"):
+        if not isinstance(training.get(key), bool):
+            raise TypeError(f"training.{key} must be true or false")
+    if training.get("velocity_normalization") not in {"none", "zscore"}:
+        raise ValueError("training.velocity_normalization must be 'none' or 'zscore'")
+    return experiment, selection, training
 
 
 def is_complete(path: Path) -> bool:
@@ -195,6 +325,8 @@ def baseline_command(
         session,
         "--experiment-name",
         experiment_name,
+        "--seed",
+        str(training["seed"]),
         "--epochs",
         str(epochs),
         "--cpu-threads",
@@ -214,7 +346,9 @@ def baseline_command(
     ]
     append_boolean_flag(command, training["optimized_forward"], "--optimized-forward")
     append_boolean_flag(command, training["shuffle_training_windows"], "--shuffle-training-windows")
-    append_boolean_flag(command, training["keep_validation_remainder"], "--keep-validation-remainder")
+    append_boolean_flag(
+        command, training["keep_validation_remainder"], "--keep-validation-remainder"
+    )
     append_boolean_flag(command, resume, "--resume")
     append_boolean_flag(command, training_only, "--training-only")
     return command
@@ -395,9 +529,7 @@ def run_channel_selection(
         if selected_sessions is None or session in selected_sessions
     ]
     channels = [
-        count
-        for count in channel_counts
-        if selected_channels is None or count in selected_channels
+        count for count in channel_counts if selected_channels is None or count in selected_channels
     ]
     runs = [(session, count) for session in sessions for count in channels]
     if not runs:
@@ -407,13 +539,7 @@ def run_channel_selection(
         baseline = baseline_summary_path(session)
         if not dry_run and not is_complete(baseline):
             raise RuntimeError(f"A completed 96-channel baseline is required: {baseline}")
-        output = (
-            PROJECT_ROOT
-            / "outputs"
-            / experiment_name
-            / session
-            / f"top{count}"
-        )
+        output = PROJECT_ROOT / "outputs" / experiment_name / session / f"top{count}"
         summary = output / "run_summary.json"
         checkpoint = output / "last_checkpoint.pt"
         if is_complete(summary):
@@ -450,6 +576,135 @@ def run_channel_selection(
                 training_only=False,
                 run_index=run_index,
                 total_runs=len(runs),
+            ),
+            dry_run,
+        )
+
+
+def transfer_selection_command(
+    *,
+    source: str,
+    target: str,
+    channels: int,
+    experiment_name: str,
+    selection: dict[str, Any],
+    training: dict[str, Any],
+    selection_only: bool,
+    smoke: bool,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(TRANSFER_SELECTION_TRAINER),
+        "--source-session",
+        source,
+        "--target-session",
+        target,
+        "--keep-channels",
+        str(channels),
+        "--experiment-name",
+        experiment_name,
+        "--seed",
+        str(training["seed"]),
+        "--velocity-normalization",
+        str(training["velocity_normalization"]),
+        "--calibration-tasks",
+        str(selection["calibration_tasks"]),
+        "--calibration-train-tasks",
+        str(selection["calibration_train_tasks"]),
+        "--aggregation-bin-ms",
+        str(selection["aggregation_bin_ms"]),
+        "--importance-quantile-bins",
+        str(selection["importance_quantile_bins"]),
+        "--source-importance-weight",
+        str(selection["source_importance_weight"]),
+        "--stationarity-weight",
+        str(selection["stationarity_weight"]),
+        "--redundancy-weight",
+        str(selection["redundancy_weight"]),
+        "--histogram-pseudocount",
+        str(selection["histogram_pseudocount"]),
+        "--pretrain-epochs",
+        str(training["pretrain_epochs"]),
+        "--finetune-epochs",
+        str(training["finetune_epochs"]),
+        "--scratch-epochs",
+        str(training["scratch_epochs"]),
+        "--pretrain-learning-rate",
+        str(training["pretrain_learning_rate"]),
+        "--finetune-learning-rate",
+        str(training["finetune_learning_rate"]),
+        "--scratch-learning-rate",
+        str(training["scratch_learning_rate"]),
+        "--pretrain-early-stopping-patience",
+        str(training["pretrain_early_stopping_patience"]),
+        "--finetune-early-stopping-patience",
+        str(training["finetune_early_stopping_patience"]),
+        "--scratch-early-stopping-patience",
+        str(training["scratch_early_stopping_patience"]),
+        "--cpu-threads",
+        str(training["cpu_threads"]),
+    ]
+    append_boolean_flag(command, training["optimized_forward"], "--optimized-forward")
+    append_boolean_flag(command, training["resume"], "--resume")
+    append_boolean_flag(
+        command,
+        training["run_target_scratch_control"],
+        "--run-target-scratch-control",
+    )
+    append_boolean_flag(command, selection_only, "--selection-only")
+    append_boolean_flag(command, smoke, "--smoke")
+    return command
+
+
+def run_transfer_channel_selection(
+    experiment: dict[str, Any],
+    selection: dict[str, Any],
+    training: dict[str, Any],
+    selected_sessions: set[str] | None,
+    selected_channels: set[int] | None,
+    selection_only: bool,
+    smoke: bool,
+    dry_run: bool,
+) -> None:
+    pairs = [
+        pair
+        for pair in experiment["pairs"]
+        if selected_sessions is None or pair["target"] in selected_sessions
+    ]
+    channels = [
+        count
+        for count in experiment["channel_counts"]
+        if selected_channels is None or count in selected_channels
+    ]
+    runs = [(pair, count) for pair in pairs for count in channels]
+    if not runs:
+        raise ValueError("The filters selected no transfer channel-selection experiments")
+    experiment_name = str(experiment["name"])
+    for pair, count in runs:
+        root = PROJECT_ROOT / "outputs" / experiment_name
+        if smoke:
+            root = root / "_smoke"
+        output = root / f"{pair['source']}_to_{pair['target']}" / f"top{count}"
+        summary_path = output / "run_summary.json"
+        if summary_path.exists():
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            expected_status = "selection_complete" if selection_only else "complete"
+            if summary.get("status") == expected_status:
+                print(
+                    f"SKIP {expected_status}: {pair['source']} -> {pair['target']} top{count}",
+                    flush=True,
+                )
+                continue
+        execute(
+            transfer_selection_command(
+                source=str(pair["source"]),
+                target=str(pair["target"]),
+                channels=int(count),
+                experiment_name=experiment_name,
+                selection=selection,
+                training=training,
+                selection_only=selection_only,
+                smoke=smoke,
             ),
             dry_run,
         )
@@ -500,20 +755,12 @@ def run_mixed_fixed_point_evaluation(
 
     for session in sessions:
         source_summary = (
-            PROJECT_ROOT
-            / "outputs"
-            / source_experiment_name
-            / session
-            / "run_summary.json"
+            PROJECT_ROOT / "outputs" / source_experiment_name / session / "run_summary.json"
         )
         if not dry_run and not is_complete(source_summary):
             raise RuntimeError(f"A completed 96-channel baseline is required: {source_summary}")
         result_summary = (
-            PROJECT_ROOT
-            / "outputs"
-            / experiment_name
-            / session
-            / "fixed_point_run_summary.json"
+            PROJECT_ROOT / "outputs" / experiment_name / session / "fixed_point_run_summary.json"
         )
         if is_complete(result_summary):
             result = json.loads(result_summary.read_text(encoding="utf-8"))
@@ -548,7 +795,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--session", action="append", choices=sorted(KNOWN_SESSIONS))
-    parser.add_argument("--channels", action="append", type=int, choices=(32, 64))
+    parser.add_argument("--channels", action="append", type=int, choices=(32, 48, 64, 80))
+    parser.add_argument("--selection-only", action="store_true")
+    parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
 
@@ -562,6 +811,27 @@ def main() -> None:
     raw_experiment = require_mapping(payload, "experiment")
     experiment_type = raw_experiment.get("type")
 
+    if experiment_type == "transfer_channel_selection":
+        experiment, selection, training = validate_transfer_config(payload)
+        print(f"config={config_path}", flush=True)
+        print(
+            f"experiment={experiment_type} name={experiment['name']} "
+            f"selection_only={args.selection_only} smoke={args.smoke} "
+            f"dry_run={args.dry_run}",
+            flush=True,
+        )
+        run_transfer_channel_selection(
+            experiment,
+            selection,
+            training,
+            selected_sessions,
+            selected_channels,
+            args.selection_only,
+            args.smoke,
+            args.dry_run,
+        )
+        return
+
     if experiment_type == "mixed_fixed_point_baseline_evaluation":
         experiment, quantization, evaluation = validate_mixed_fixed_point_config(payload)
         print(f"config={config_path}", flush=True)
@@ -570,8 +840,10 @@ def main() -> None:
             flush=True,
         )
         if selected_channels:
+            raise ValueError("--channels cannot be used with a mixed fixed-point baseline config")
+        if args.selection_only or args.smoke:
             raise ValueError(
-                "--channels cannot be used with a mixed fixed-point baseline config"
+                "--selection-only and --smoke can only be used with transfer experiments"
             )
         run_mixed_fixed_point_evaluation(
             experiment,
@@ -589,10 +861,18 @@ def main() -> None:
         flush=True,
     )
     if experiment_type == "baseline":
+        if args.selection_only or args.smoke:
+            raise ValueError(
+                "--selection-only and --smoke can only be used with transfer experiments"
+            )
         if selected_channels:
             raise ValueError("--channels can only be used with a channel_selection config")
         run_baselines(experiment, training, selected_sessions, args.dry_run)
     elif experiment_type == "channel_selection":
+        if args.selection_only or args.smoke:
+            raise ValueError(
+                "--selection-only and --smoke can only be used with transfer experiments"
+            )
         run_channel_selection(
             experiment,
             training,
@@ -603,7 +883,7 @@ def main() -> None:
     else:
         raise ValueError(
             "experiment.type must be 'baseline', 'channel_selection', "
-            "or 'mixed_fixed_point_baseline_evaluation'"
+            "'transfer_channel_selection', or 'mixed_fixed_point_baseline_evaluation'"
         )
 
 
