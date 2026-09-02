@@ -23,7 +23,14 @@ uv run python experiments/multisource_cross_session_20260903/run_multisource_pil
 
 uv run python experiments/multisource_cross_session_20260903/run_multisource_pilot.py `
   --source-bank recent3 --calibration-tasks 20 --seed 42 --smoke
+
+# 전체 36개 pilot matrix와 실시간 상태 파일 생성
+uv run python experiments/multisource_cross_session_20260903/run_pilot_suite.py
 ```
+
+전체 실행 중 현재 테스트와 완료/실패 수는
+`outputs/multisource_cross_session_20260903/suite_status.json`, 전체 epoch 로그는
+`outputs/multisource_cross_session_20260903/suite.log`에서 확인한다.
 
 본 실험은 `single_recent`, `recent3`, `diverse3`, `all_past`를 같은 target·seed·calibration·
 held-out test로 비교한다. `--smoke`는 실행 경로 검증용이며 과학적 결과로 해석하지 않는다.
