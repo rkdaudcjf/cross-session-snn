@@ -71,6 +71,14 @@ cross-session-snn/
 └─ src/cross_session_snn/      # 공통 데이터·SNN pipeline
 ```
 
+## 2026-09-03 multi-source cross-session 확장
+
+기존 single-source 20-task 전이 결과 다음 단계로, 총 source task 수를 고정한
+multi-source 실험 환경을 추가했다. 실험 계획과 실행법은
+[`experiments/multisource_cross_session_20260903/README.md`](experiments/multisource_cross_session_20260903/README.md),
+현재 진행 보고는
+[`docs/MULTISOURCE_CROSS_SESSION_PLAN_KO.md`](docs/MULTISOURCE_CROSS_SESSION_PLAN_KO.md)에 있다.
+
 ## 설치
 
 Python 3.11, PyTorch 2.5.1 CPU build, snnTorch 1.0.0을 사용합니다.

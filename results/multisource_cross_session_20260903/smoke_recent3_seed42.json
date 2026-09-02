@@ -1,0 +1,35 @@
+{
+  "status": "smoke_complete",
+  "source_bank": "recent3",
+  "sources": [
+    "indy_20160630_01",
+    "indy_20170124_01",
+    "indy_20170127_03"
+  ],
+  "target": "indy_20170131_02",
+  "seed": 42,
+  "requested_calibration_tasks": 20,
+  "executed_calibration_tasks": 4,
+  "executed_source_tasks": 9,
+  "epochs": 2,
+  "evaluation_max_steps": 512,
+  "selected_candidate": "head_only",
+  "selected_test": {
+    "R2": -3.3594496332538295,
+    "CC": 0.28509734921970786,
+    "RMSE": 41.22360635121772
+  },
+  "scratch_test": {
+    "R2": -11.788110620266645,
+    "CC": -0.14787557783178806,
+    "RMSE": 67.08945784306603
+  },
+  "elapsed_seconds": 51.19395899993833,
+  "interpretation": "Execution-path validation only; not a scientific performance estimate.",
+  "controls_verified": {
+    "all_sources_precede_target": true,
+    "future_target_excluded": true,
+    "target_validation_and_test_excluded_from_channel_ranking": true,
+    "validation_gated_adaptation_selection": true
+  }
+}

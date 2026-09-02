@@ -1,0 +1,39 @@
+schema_version: 1
+experiment:
+  name: multisource_cross_session_20260903
+  target: indy_20170131_02
+  source_banks:
+    single_recent:
+      - indy_20170127_03
+    recent3:
+      - indy_20160630_01
+      - indy_20170124_01
+      - indy_20170127_03
+    diverse3:
+      - indy_20160622_01
+      - indy_20170124_01
+      - indy_20170127_03
+    all_past:
+      - indy_20160622_01
+      - indy_20160630_01
+      - indy_20170124_01
+      - indy_20170127_03
+  source_task_budget_total: 120
+  source_validation_tasks_per_session: 4
+  channel_count: 64
+  calibration_tasks: [20, 40, 80]
+  seeds: [42, 43, 44]
+  adaptation_candidates: [source_only, head_only, last_block, full]
+  scratch_control: true
+  success_criteria:
+    median_delta_r2_vs_single_source: 0.05
+    positive_target_fraction: 0.70
+protocol:
+  chronological_only: true
+  future_target_as_source: false
+  equal_total_source_tasks: true
+  source_session_balancing: equal_tasks_per_source
+  velocity_normalization: per_source_train_zscore_and_target_calibration_zscore
+  candidate_selection: target_validation_r2
+  test_policy: selected_adaptation_and_scratch_each_evaluated_once
+  primary_metrics: [R2, CC, RMSE]
