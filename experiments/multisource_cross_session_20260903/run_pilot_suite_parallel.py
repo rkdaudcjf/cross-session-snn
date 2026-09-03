@@ -9,6 +9,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -101,7 +102,8 @@ class ParallelSuite:
         self.state_lock = threading.Lock()
         self.log_lock = threading.Lock()
         self.workers: dict[str, dict[str, Any] | None] = {
-            f"worker_{index}": None for index in range(1, args.workers + 1)
+            f"worker_{index}": None
+            for index in range(args.worker_offset + 1, args.worker_offset + args.workers + 1)
         }
         self.tasks: queue.Queue[dict[str, Any]] = queue.Queue()
         for test in self.tests:
@@ -164,6 +166,7 @@ class ParallelSuite:
                 f"{worker_name} lock busy; requeue test={test['number']:02d}", worker_log
             )
             self.tasks.put(test)
+            time.sleep(2)
             return
         try:
             saved = completed_summary(test)
@@ -261,7 +264,10 @@ class ParallelSuite:
             self.write_status()
             threads = [
                 threading.Thread(target=self.worker, args=(index,), name=f"worker_{index}")
-                for index in range(1, self.args.workers + 1)
+                for index in range(
+                    self.args.worker_offset + 1,
+                    self.args.worker_offset + self.args.workers + 1,
+                )
             ]
             for thread in threads:
                 thread.start()
@@ -277,12 +283,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, choices=(1, 2, 3), default=2)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--cpu-threads", type=int, default=3)
+    parser.add_argument("--pool-id", choices=("main", "extra"), default="main")
+    parser.add_argument("--worker-offset", type=int, choices=(0, 2), default=0)
     parser.add_argument("--list-only", action="store_true")
     return parser.parse_args()
 
 
+def configure_pool_paths(pool_id: str) -> None:
+    global STATUS_PATH, PARALLEL_LOG_PATH, PID_PATH, STOP_PATH
+    if pool_id == "main":
+        return
+    STATUS_PATH = OUTPUT_ROOT / f"suite_status_{pool_id}.json"
+    PARALLEL_LOG_PATH = OUTPUT_ROOT / f"suite_parallel_{pool_id}.log"
+    PID_PATH = OUTPUT_ROOT / f"suite_parallel_{pool_id}.pid"
+    STOP_PATH = OUTPUT_ROOT / f"STOP_PARALLEL_SUITE_{pool_id.upper()}"
+
+
 def main() -> None:
     args = parse_args()
+    configure_pool_paths(args.pool_id)
     if args.list_only:
         tests = build_tests()
         pending = [test for test in tests if completed_summary(test) is None]

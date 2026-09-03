@@ -30,12 +30,17 @@ uv run python experiments/multisource_cross_session_20260903/run_pilot_suite.py
 # 중단된 suite를 2-worker 동적 대기열로 재개
 uv run python experiments/multisource_cross_session_20260903/run_pilot_suite_parallel.py `
   --workers 2 --cpu-threads 3
+
+# 기존 worker 1·2를 유지하면서 worker 3·4 추가
+uv run python experiments/multisource_cross_session_20260903/run_pilot_suite_parallel.py `
+  --pool-id extra --worker-offset 2 --workers 2 --cpu-threads 2
 ```
 
 전체 실행 중 현재 테스트와 완료/실패 수는
 `outputs/multisource_cross_session_20260903/suite_status.json`, 전체 epoch 로그는
 `outputs/multisource_cross_session_20260903/suite.log`에서 확인한다.
 병렬 실행에서는 `suite_parallel.log`, `suite_worker_1.log`, `suite_worker_2.log`도 생성된다.
+추가 pool은 `suite_status_extra.json`, `suite_worker_3.log`, `suite_worker_4.log`를 사용한다.
 중단하려면 output root에 `STOP_PARALLEL_SUITE` 파일을 만들면 현재 테스트가 끝난 뒤 멈춘다.
 
 본 실험은 `single_recent`, `recent3`, `diverse3`, `all_past`를 같은 target·seed·calibration·
