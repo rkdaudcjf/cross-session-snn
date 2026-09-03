@@ -26,11 +26,17 @@ uv run python experiments/multisource_cross_session_20260903/run_multisource_pil
 
 # 전체 36개 pilot matrix와 실시간 상태 파일 생성
 uv run python experiments/multisource_cross_session_20260903/run_pilot_suite.py
+
+# 중단된 suite를 2-worker 동적 대기열로 재개
+uv run python experiments/multisource_cross_session_20260903/run_pilot_suite_parallel.py `
+  --workers 2 --cpu-threads 3
 ```
 
 전체 실행 중 현재 테스트와 완료/실패 수는
 `outputs/multisource_cross_session_20260903/suite_status.json`, 전체 epoch 로그는
 `outputs/multisource_cross_session_20260903/suite.log`에서 확인한다.
+병렬 실행에서는 `suite_parallel.log`, `suite_worker_1.log`, `suite_worker_2.log`도 생성된다.
+중단하려면 output root에 `STOP_PARALLEL_SUITE` 파일을 만들면 현재 테스트가 끝난 뒤 멈춘다.
 
 본 실험은 `single_recent`, `recent3`, `diverse3`, `all_past`를 같은 target·seed·calibration·
 held-out test로 비교한다. `--smoke`는 실행 경로 검증용이며 과학적 결과로 해석하지 않는다.
