@@ -41,6 +41,7 @@ uv run python experiments/multisource_cross_session_20260903/run_pilot_suite_par
 `outputs/multisource_cross_session_20260903/suite.log`에서 확인한다.
 병렬 실행에서는 `suite_parallel.log`, `suite_worker_1.log`, `suite_worker_2.log`도 생성된다.
 추가 pool은 `suite_status_extra.json`, `suite_worker_3.log`, `suite_worker_4.log`를 사용한다.
+두 pool을 합친 실제 상태는 `suite_status_combined.json`에서 확인한다.
 중단하려면 output root에 `STOP_PARALLEL_SUITE` 파일을 만들면 현재 테스트가 끝난 뒤 멈춘다.
 
 본 실험은 `single_recent`, `recent3`, `diverse3`, `all_past`를 같은 target·seed·calibration·
